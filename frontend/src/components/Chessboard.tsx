@@ -1,5 +1,8 @@
 import { Chess, Color, PieceSymbol, Square } from 'chess.js';
 import { useEffect, useState } from 'react';
+import { UserStore } from '../zustand/user';
+import { GameStore } from '../zustand/game';
+import axios from 'axios';
 
 
 // !agar koi element hoga tohi mereko woh position milega else nahi milega 
@@ -21,8 +24,36 @@ const Chessboard = ({board,socket,chess,setBoard}:{
     } | null)[][]>) => void;
 }) => {
 
+    const {id}=UserStore();
+    const {game_id,player_email,player_color}=GameStore();
+
+
+    const [moves,setMoves]=useState<any[]>([]);
+
     const [from,setFrom]=useState<string >("");
     const [to,setTo]=useState<string >("");
+
+    async function getting_moves(game_id:string){
+
+        try {
+
+            const getting=await axios.get("http://localhost:8080/movesList",{
+                params:{
+                    gameId:game_id
+                },
+                withCredentials:true
+            })
+
+
+            console.log("the moves received is ",getting.data.moves);
+
+            setMoves(getting.data.moves);
+            
+        } catch (error) {
+            console.log("error occured while getting the moves ",error);
+        }
+
+    }
     useEffect(()=>{
         if(from=="" || to==""){
             console.log("kuch to update nahi ho rha hai ");
@@ -41,22 +72,47 @@ const Chessboard = ({board,socket,chess,setBoard}:{
                     console.log("the to is ",to);
                     return;
                  }
+                //  !the frontend is able to perform both the move which should not be the case
+                // !comeup with a logic to identify which player is making the move and whether the player is allowed to move that colour or not 
+                // !i really need this info at a global level the player colour 
+
+                console.log("the player email is ",player_email);   
+                console.log("the game id is ",game_id);
                 socket.send(JSON.stringify({
                     message:"MOVE",
                     move:{
                         from:from,
                         to:to
-                    }
+                    },
+                    email:player_email,
+                    gameId:game_id
+                    
                 }));
                 // !reset the from and to
                 
                 // !khud bhi toh move perform karo and let the ui update 
                 // !this is the frontend move
+
+                // !dont you think i should be trying the move in the frontend and then we should pass it to the backend the justified move so that the testing overload gets checked in the first move as well
+
                 chess.move({
                     from:from,
                     to:to
                 });
                 setBoard(chess.board());
+
+                // !everytime a make a move i should also be rendering it 
+                // !for now let it be of first principles that i am calling the db again and again 
+                // !next i can be improving it in the way i can optimize the application 
+
+                getting_moves(game_id);
+                
+
+                // !every time a move is done write the code which checks first if that move is valid or not 
+                // !get the game id and the player id and then we can set the move db all set for it 
+
+                // frontend mai thori save kar sakte hai bro??
+
 
                 setFrom("");
                 setTo("");
@@ -89,6 +145,10 @@ const Chessboard = ({board,socket,chess,setBoard}:{
             // check if from has a square or not
             console.log("ami from er modhey update korte aisi")
             if(square!=undefined){
+            if(chess.get(square).color!=player_color){
+                console.log("laude dusro ki goti kyu chuta hai");
+                return;
+            }
             setFrom(actual_position);
             console.log("the from is selected");
             }else{
